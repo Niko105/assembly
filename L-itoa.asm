@@ -27,7 +27,7 @@ section .text align=16
 
 ;int itoa(rdi=int, rsi=&buffer, rdx=&out_start). clobbers rax, rcx, r8, r10
 itoa:
-    ;swap some stuff around for division and such
+    ;swap some stuff around for division and such, which is very slow, do consider updating this function or at least marking it as slow in the documentation
     mov rax, rdi
     mov rdi, rdx
 
@@ -70,7 +70,8 @@ itoa:
 
         ;set the length of the string as the output (19-counter)
         mov rax, 21
-        sub rax, rcx 
+        sub rax, rcx
+        dec rax ;remove null terminator
         
     ret
 

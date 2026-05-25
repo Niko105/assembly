@@ -4,7 +4,9 @@ global _start ;entry point, variables given ./program v are stored in argv argc 
 ;[rsp] has argc, [rsp+8] is not argv[0] but it is the pointer to it
 ;meaning [rsp+8+n*8] points at the nth argument given, every argument is null terminated
 ;any extern functions come after this line
-
+extern atoi ;int atoi(rdi=&string, rsi=len), clobbers rax
+extern strlen ;int strlen(rdi=&string), no clobber
+extern itoa ;int itoa(rdi=int, rsi=&buffer, rdx=&out_start). clobbers rax, rcx, r8, r9, r10
 
 ;===============================================================================
 
@@ -51,22 +53,68 @@ section .data ;user data
 
 section .bss ;unallocated data
 
-;buffer resb 50 ;reserve 50 bytes as a scratch buffer
+inout resb 24                   ;reserve 24 bytes for input/output
+out_start resq 1                ;reserve one singular 64 bit buffer for the itoa output
 
 ;===============================================================================
 
 section .text align=16 ;code, aligned on a 16byte boundary
 
 ;----------------------------------explanation----------------------------------
-;code explanation
+;calculates the nth collatz sequence and outputs how long it took to execute it
+;takes input from stdin and outputs in stdout, real number using my
+;implementation of atoi and itoa, standalone program so hehehehehehe
 ;-------------------------------------------------------------------------------
 
 _start:
-    
+    ;; take input from stdin
+    xor eax, eax                ;set rax to 0 (syscall read)
+    xor edi, edi                ;set rdi to 0 (stdin)
+    mov rsi, inout              ;place into buffer
+    mov rdx, 24                 ;read 24 bytes (64 bit numbers are at most 20 digits, plus -)
+    syscall                     ;read(stdin); now inout has the string and rax has the length read
 
-    _exit:
-        mov rax, syscallExit ;exit()
-        xor rdi, rdi
-        syscall
+    ;; transform the string to a number
+    dec rax                     ;decrease the string length to exclude '\n'
+    mov rsi, rax                ;save the string length to the second atoi input
+    mov rdi, inout              ;move the string pointer to the first input
+    call atoi                   ;now rax should have the number, and rcx, r8, r10 are clobbered
+
+    ;; loop setup, rcx for counting iterations, rax for the number itself to be stored in
+    xor ecx, ecx                ;blank ecx for the iteration count
+    ;; main collatz loop
+.loop:
+    cmp rax, 1                  ;are we done yet? (did we reach 1?)
+    je .end                     ;lookies! we're done! (or not)
+    test rax, 1                 ;check if the number's even (zero flag set) or odd (zero flag not set)
+    jz .even                    ;if even, jump to the even branch, otherwise continue to odd branch
+.odd:                           ;this label is useless actually, but the compiled code removes it, it's for readability
+    lea rax, [rax+rax*2]        ;rax*3 (using lea's barrel shifter)
+    inc rax                     ;+1
+    jmp .next                   ;unconditional jump to .next to avoid the even branch
+.even:
+    shr rax, 1                  ;shift right by one for /2, could use tzcnt for multiple /2 in one go but then i'd desync the rcx
+.next:
+    inc rcx                     ;add one to the iteration count
+    jmp .loop                   ;loop back to the start of the loop
+.end:
+
+    ;; transform the number back to a string
+    mov rsi, inout              ;setup the buffer for itoa
+    mov rdi, rcx                ;send the number to convert
+    mov rdx, out_start          ;send the outpointer for the buffer's new start location
+    call itoa                   ;rax now has the length of the number as a string, and inout has the number string itself (right to left), with out_start having its start location
+
+    ;; write to stdout
+    mov rdx, rax                ;load the number of bytes to write
+    mov rax, syscallWrite       ;so like turns out you need to set up the rax register for syscall who could've thought.
+    mov rdi, 1                  ;stdout
+    mov rsi, [out_start]        ;it's gotta be funky cause the inout buffer is useless to me now
+    syscall                     ;write(stdout); now rax has the output code and hopefully my terminal has the result
+
+exit:
+    mov rax, syscallExit        ;exit()
+    xor edi, edi                ;that's the part that actually does the 0 code
+    syscall                     ;terminate the program
 
 ;===============================================================================
