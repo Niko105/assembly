@@ -9,8 +9,7 @@ strlen: ;gets how long a null terminated string is. rdi=address(in), rax=length(
     ;pre/post function stack isn't needed
     xor rax, rax ;set rax to 0
     .loop:
-        mov bl, byte [rdi + rax] ;check one byte at rdi (+rax as offset)
-        cmp bl, 0 ;is the byte 0?
+        cmp BYTE [rdi+rax], 0 ;is the byte 0?
         je .done ;check if it's equal
         inc rax ;it's not, f*ck, increase rax since we gotta check a new byte
         jmp .loop ;and loop
