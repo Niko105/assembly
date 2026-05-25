@@ -71,8 +71,7 @@ itoa:
         ;set the length of the string as the output (19-counter)
         mov rax, 21
         sub rax, rcx
-        dec rax ;remove null terminator
-        
+
     ret
 
 ;===============================================================================
