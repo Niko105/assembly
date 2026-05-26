@@ -3,24 +3,27 @@ OBJ_DIR := build
 OBJECTS := $(ASM_SOURCES:%.asm=$(OBJ_DIR)/%.o)
 LIBRARY := libNiko.a
 
+DEBUG ?= 0
+ifeq ($(DEBUG), 1)
+	NASM_FLAGS := -f elf64 -g -F dwarf
+else
+	NASM_FLAGS := -f elf64
+endif
+
 .PHONY: all clean
 
 all: $(LIBRARY)
 
-# Build the static library from all object files
 $(LIBRARY): $(OBJECTS)
 	ar rcs $@ $^
 
-# Assemble each asm file into .o
 $(OBJ_DIR)/%.o: %.asm | $(OBJ_DIR)
-	nasm -f elf64 $< -o $@
+	nasm $(NASM_FLAGS) $< -o $@
 
-# Ensure build directory exists
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 clean:
 	rm -rf $(OBJ_DIR) $(LIBRARY)
 
-
-#made entirely with chatgpt, i do NOT know makefile
+#make DEBUG=1 for the version with debug symbols
