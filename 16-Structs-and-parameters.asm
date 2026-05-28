@@ -103,14 +103,14 @@ section .text align=16 ;code, aligned on a 16byte boundary
 ;; } Rect;
 ;; int area(Rect r);                //calculates the area of the rect
 ;; Point center(Rect r);            //calculates the center of rect
-;; int contains(Rect r, Point p);   //calculates if the point is in the rect
+;; void setPos(Rect* r, Point p);   //sets the position of a rect
 ;; //-----//
 ;; Point a = Point(4, 3);           //create a point
 ;; Rect  a = Rect(a, 4, 2, 0);      //create a rect
 ;; Point b = Point(2, 3);           //create another point
 ;; (void)area(a);                   //calculate the area and don't care about the return cause it's in assembly and it'd be annoying
 ;; (void)center(a);                 //calculate the center of the rect (extract the origin)
-;; (void)contains(a, b);            //calculated if the point is in the rect (deer god)
+;; setPos(&a, b);                   //set the position of Rect a to Point b
 ;
 ;into asm, this means 3 functions and a main.
 ;
@@ -135,77 +135,71 @@ _start:
     mov DWORD [rsp+8], 4        ;width
     mov DWORD [rsp+12], 2       ;height
     mov DWORD [rsp+16], 0       ;colour
+    lea r14, [rsp]              ;save the struct's position
     ;; Rect b = Point(2, 3)
     mov r13d, 3                 ;Point b.y, r13 is callee saved again so it's safe
     shl r13, 32                 ;pack
     or r13, 2                   ;Point b.x
     ;; (void)area(a); -> int
-    lea rax, [rsp]              ;save the rsp address for easier indexing (not needed, but saves me some pain)
     sub rsp, 32                 ;make more space on the stack for copying the struct by value, fun fact, large structs in C are usually passed by reference with "const", in asm there's no const but the rule still applies
-    mov edx, [rax]              ;intermediate
+    mov edx, [r14]              ;intermediate
     mov DWORD [rsp], edx        ;a.x
-    mov edx, [rax+4]            ;intermediate
+    mov edx, [r14+4]            ;intermediate
     mov DWORD [rsp+4], edx      ;a.y
-    mov edx, [rax+8]            ;intermediate
+    mov edx, [r14+8]            ;intermediate
     mov DWORD [rsp+8], edx      ;width
-    mov edx, [rax+12]           ;intermediate
+    mov edx, [r14+12]           ;intermediate
     mov DWORD [rsp+12], edx     ;height
-    mov edx, [rax+16]           ;intermediate
+    mov edx, [r14+16]           ;intermediate
     mov DWORD [rsp+16], edx     ;colour
     lea rdi, [rsp]              ;ready first argument (rect a)
     call area                   ;call the function
     add rsp, 32                 ;free the pass-by-value struct
     ;; (void)center(a); -> Point
-    lea rax, [rsp]              ;save the rsp address for easier indexing (not needed, but saves me some pain)
     sub rsp, 32                 ;make more space on the stack for copying the struct by value, fun fact, large structs in C are usually passed by reference with "const", in asm there's no const but the rule still applies
-    mov edx, [rax]              ;intermediate
+    mov edx, [r14]              ;intermediate
     mov DWORD [rsp], edx        ;a.x
-    mov edx, [rax+4]            ;intermediate
+    mov edx, [r14+4]            ;intermediate
     mov DWORD [rsp+4], edx      ;a.y
-    mov edx, [rax+8]            ;intermediate
+    mov edx, [r14+8]            ;intermediate
     mov DWORD [rsp+8], edx      ;width
-    mov edx, [rax+12]           ;intermediate
+    mov edx, [r14+12]           ;intermediate
     mov DWORD [rsp+12], edx     ;height
-    mov edx, [rax+16]           ;intermediate
+    mov edx, [r14+16]           ;intermediate
     mov DWORD [rsp+16], edx     ;colour
     lea rdi, [rsp]              ;ready first argument (rect a)
     call center                 ;function call, slight tangent, on longer copies this becomes really slow and tedious to write out, so you either move by reference or use "rep movsd" which basically functions as memcpy in c, in fact it's so good it's a lot faster on larger structs: lea rdi, [rsp]; lea rsi [rsp]; mov ecx, 5; rep movsd; will copy 5 (ecx) dwords from [rsi] to [rdi], it's very useful. not in my case since it's 5 fields and it's just faster to unroll it.
     add rsp, 32                 ;free the pass-by-value struct
-    ;; (void)contains(a, b); -> int (0|1)
-    lea rax, [rsp]              ;save the rsp address for easier indexing (not needed, but saves me some pain)
-    sub rsp, 32                 ;make more space on the stack for copying the struct by value, fun fact, large structs in C are usually passed by reference with "const", in asm there's no const but the rule still applies
-    mov edx, [rax]              ;intermediate
-    mov DWORD [rsp], edx        ;a.x
-    mov edx, [rax+4]            ;intermediate
-    mov DWORD [rsp+4], edx      ;a.y
-    mov edx, [rax+8]            ;intermediate
-    mov DWORD [rsp+8], edx      ;width
-    mov edx, [rax+12]           ;intermediate
-    mov DWORD [rsp+12], edx     ;height
-    mov edx, [rax+16]           ;intermediate
-    mov DWORD [rsp+16], edx     ;colour
-    lea rdi, [rsp]              ;ready first argument (rect a)
+    ;; setPos(a, b); ->
+    mov rax, r12                ;ready first argument (rect* a)
     mov rsi, r13                ;ready second argument (point b)
     call contains               ;function call
-    add rsp, 64                 ;free stack
+    add rsp, 64                 ;free stack from both the pass-by-value and the original struct
 exit:
     mov rax, syscallExit        ;exit()
     xor edi, edi                ;that's the part that actually does the 0 code
     syscall                     ;terminate the program
 
-;;; functions :3
+;;; functions :3 if i used the stack in any of these i would save rbp and read it back into rsp at the end to save a stack frame (for debugging) since rsp and rbp is callee saved
 area:                           ;int area(Rect)
-    ;; expected variables: a 20 byte rect in [rsp+8] through [rsp+20], 5 ints: xpos ypos width height colour
+    ;; expected variables: a 20 byte rect in [rdi], 5 ints: xpos ypos width height colour
     ;; returning an int representing the area of a rect, take width and height and multiply them.
+    mov eax, [rdi+8]            ;load width, ints, not longs, 32 bit
+    imul eax, [rdi+12]          ;width*height
     ret
 
-center:                         ;Point center(Rect)
-    ;; expected variables: a 20 byte rect in [rsp+8] through [rsp+20], 5 ints: xpos ypos width height colour
+center:                         ;Point center(Rect), entirely useless in actual C since it just has a nested struct but good for exercise here
+    ;; expected variables: a 20 byte rect in [rdi], 5 ints: xpos ypos width height colour
     ;; returning an 8 byte struct in rax, 2 ints: xpos ypos
+    mov eax, [rdi]              ;extract x position
+    shl rax, 32                 ;pack
+    or rax, [rdi+4]             ;extract y position
     ret
 
-contains:                       ;int contains(Rect r, Point p)
-    ;; expected variables: a 20 byte rect in [rsp+8] through [rsp+20], 5 ints: xpos ypos width height colour, an 8 byte struct in rdi, 2 ints: xpos ypos
+setpos:                         ;void setPos()
+    ;; expected variables: a 20 byte rect in [rdi] passed by reference, 5 ints: xpos ypos width height colour, an 8 byte struct in rax, 2 ints: xpos ypos
+    ;; returning none, the struct given should be modified directly
+
     ret
 
 ;===============================================================================
