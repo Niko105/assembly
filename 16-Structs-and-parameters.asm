@@ -171,9 +171,9 @@ _start:
     call center                 ;function call, slight tangent, on longer copies this becomes really slow and tedious to write out, so you either move by reference or use "rep movsd" which basically functions as memcpy in c, in fact it's so good it's a lot faster on larger structs: lea rdi, [rsp]; lea rsi [rsp]; mov ecx, 5; rep movsd; will copy 5 (ecx) dwords from [rsi] to [rdi], it's very useful. not in my case since it's 5 fields and it's just faster to unroll it.
     add rsp, 32                 ;free the pass-by-value struct
     ;; setPos(a, b); ->
-    mov rax, r12                ;ready first argument (rect* a)
+    mov rdi, r14                ;ready first argument (rect* a)
     mov rsi, r13                ;ready second argument (point b)
-    call contains               ;function call
+    call setpos                 ;function call
     add rsp, 64                 ;free stack from both the pass-by-value and the original struct
 exit:
     mov rax, syscallExit        ;exit()
@@ -191,15 +191,17 @@ area:                           ;int area(Rect)
 center:                         ;Point center(Rect), entirely useless in actual C since it just has a nested struct but good for exercise here
     ;; expected variables: a 20 byte rect in [rdi], 5 ints: xpos ypos width height colour
     ;; returning an 8 byte struct in rax, 2 ints: xpos ypos
-    mov eax, [rdi]              ;extract x position
+    mov eax, [rdi+4]            ;extract x position
     shl rax, 32                 ;pack
-    or rax, [rdi+4]             ;extract y position
+    or rax, [rdi]               ;extract y position
     ret
 
 setpos:                         ;void setPos()
-    ;; expected variables: a 20 byte rect in [rdi] passed by reference, 5 ints: xpos ypos width height colour, an 8 byte struct in rax, 2 ints: xpos ypos
+    ;; expected variables: a 20 byte rect in [rdi] passed by reference, 5 ints: xpos ypos width height colour, an 8 byte struct in rsi, 2 ints: xpos ypos
     ;; returning none, the struct given should be modified directly
-
+    mov DWORD [rdi], esi         ;move b.x to a.origin.x
+    shr rsi, 32                  ;unpack b.x
+    mov DWORD [rdi+4], esi       ;move b.y to a.origin.y
     ret
 
 ;===============================================================================
