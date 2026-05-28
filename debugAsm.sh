@@ -1,1 +1,0 @@
-edb --run ./program
