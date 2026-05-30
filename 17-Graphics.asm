@@ -43,10 +43,6 @@ syscallRmdir    equ 84          ;rax=84, rdi=dir name
 syscallLseek    equ 8           ;rax=8, rdi=fd, rsi=offset to seek, rdx=whence (0 (from beginning of the file), 1 (from current position), 2 (from end of the file))
 ;-------------------------------------------------------------------------------
 
-;----------------------------------open flags----------------------------------
-
-;-------------------------------------------------------------------------------
-
 ;===============================================================================
 
 section .data ;user data
@@ -92,12 +88,29 @@ _start:
     js errorNmap                ;FUUUUUUUUUUUU
     mov r15, rax                ;save the buffer position
     ;; write to it, offset=(y*1920+x)*4
-    mov DWORD [r15+4149120], 0x00FF0000 ;red pixel 0x00RRGGBB
+    mov DWORD [r15], 0x00FFFFFFFF       ;white pixel in the top left 0x00RRGGBB
+    mov DWORD [r15+4149120], 0x00FF0000 ;red pixel
     mov DWORD [r15+4149124], 0x0000FF00 ;green pixel
     mov DWORD [r15+4149128], 0x000000FF ;blue
     mov DWORD [r15+4149132], 0x00FFFF00 ;yellow
     mov DWORD [r15+4149136], 0x00FF00FF ;ourple
-
+    mov DWORD [r15+8294396], 0x00FFFFFF ;bottom right
+    ;; fill a little square: r9 x, r8 y, rbx height, rcx width, r11 offset, rdi position
+    mov rbx, 40                 ;height
+    mov eax, 0x00FFFFFF         ;colour (has to be eax)
+    mov r9, (1080/2)            ;x position
+    mov r8, (1920/2)            ;y position
+    mov r11, r9                 ;setup for the first multiplication
+    imul r11, 1920              ;*1920
+    add r11, r8                 ;add x position
+    shl r11, 2                  ;*4, now the offset is ready
+    lea rdi, [r15+r11]          ;top left
+square:
+    mov rcx, 40                 ;width (has to ve rcx)
+    rep stosd                   ;from edi, fill rcx dwords with eax, rcx gets then set to 0
+    add rdi, (1920-40)*4        ;next row
+    dec rbx                     ;next loop
+    jnz square                  ;still stuff to do?
     ;; sleep for 2 seconds
     sub rsp, 16                 ;make space on the stack for the crappy struct it needs
     mov QWORD [rsp], 2          ;seconds
@@ -127,7 +140,7 @@ errorOpen:
     mov rax, syscallWrite       ;rax=1, rdi=where to (1 for stdout, 2 for stderr), rsi=message, rdx=length
     mov rdi, 2                  ;stderr
     mov rsi, errorOpenMess      ;Error opening file
-    mov rdx, 20                 ;21 bytes
+    mov rdx, 21                 ;21 bytes
     syscall                     ;write(stdin, "Error opening file\n")
     mov rax, syscallExit        ;exiting with error
     mov rdi, 1                  ;error code 1
